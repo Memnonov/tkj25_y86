@@ -2,18 +2,23 @@
 #       Now we often have to move the result value to be used
 #       as the first value of the next subroutine call.
 
-#.pos 0
-#test_setup:
-#    irmovq    $4, %r8         # %r8 = base
-#    irmovq    $3, %r9         # %r9 = exponent
-#    irmovq    $3, %r10        # %r10 = modulo
-#
+.pos 0
+test_setup:
+    irmovq    $4, %r8         # %r8 = base
+    irmovq    $3, %r9         # %r9 = exponent
+    irmovq    $3, %r10        # %r10 = modulo
+
 init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
 
 # REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers 13+.
 main:
+    # TEST TEST TEST
+    #irmovq    $111, %rsi
+    #irmovq    $6, %rdi
+    #call      multiply
+    
     # Calculate and assign base := base % modulo
     rrmovq    %r8, %rsi
     rrmovq    %r10, %rdi
@@ -24,7 +29,6 @@ main:
     irmovq    $1, %r11        # %r11 = Result accumulator
     
     # Initialize masks
-    irmovq    full_bit_mask, %rcx           # Address of full bit mask
     mrmovq    0(%rcx), %r12                 # %r12 = full bit mask
     irmovq    first_bit_mask, %rcx          # Address of first bit mask
     mrmovq    0(%rcx), %r13                 # %r13 = first bit mask
@@ -32,8 +36,10 @@ main:
 loop:
     # Iterate for every relevant bit in the exponent
     rrmovq    %r9, %rax      # Tmp of exponent
-    andq      %r12, %rax     # Check with mask for relevant bits left
-    je        done           # No more bits to process
+    subq      %r13, %rax     # Check for relevant bits left
+    #andq      %r12, %rax     # Check with mask for relevant bits left
+    jl        done           # No more bits to process
+    rrmovq    %r9, %rax      # Tmp of exponent
     andq      %r13, %rax     # Check if current bit is set
     je        update_params  # Current bit not set, skip to iteration end
     
@@ -103,22 +109,24 @@ multiply:
     je        multiply_done
     andq      %rdi, %rdi                    # %rdi = the shifted operarand
     je        multiply_done
-    irmovq    full_bit_mask, %rcx           # Address of full bit mask
-    mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
+    #irmovq    full_bit_mask, %rcx           # Address of full bit mask
+    #mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
     irmovq    first_bit_mask, %rcx          # Address of first bit mask
     mrmovq    0(%rcx), %rbx                 # %rbx = first bit mask
 
 multiply_loop:
     rrmovq    %rsi, %rcx                     # temp of operand
-    andq      %rdx, %rcx                     # Mask with full mask to see if any terms remain
-    je        multiply_done                  # No more terms
+    #andq      %rdx, %rcx                     # Mask with full mask to see if any terms remain
+    subq      %rbx, %rcx                     # Check for relevant bits lef
+    jl        multiply_done                  # No more terms
+    rrmovq    %rsi, %rcx                     # temp of operand
     andq      %rbx, %rcx                     # Use small mask to check current term
     je        do_them_shifts                 # A term was 0
     addq      %rdi, %rax                     # result += current shift of the operand
     
 do_them_shifts:
-    addq      %rdx, %rdx                     # Left shift relevant registers      
-    addq      %rbx, %rbx
+    #addq      %rdx, %rdx                     # Left shift relevant registers      
+    addq      %rbx, %rbx                     # Left shift relevant registers  
     addq      %rdi, %rdi
     jmp       multiply_loop
     
@@ -126,97 +134,6 @@ multiply_done:
     ret                                      # Return result in %rax
 
 .pos 0x300
-full_bit_mask:
-    .quad     0xFFFFFFFFFFFFFFFF             # Constant: Full bit mask
-first_bit_mask:
-    .quad     1                              # Constant: First bit mask
-
-.pos 0x400
-stack:
-test_setup:
-    irmovq    $2, %r8         # %r8 = base
-    irmovq    $3, %r9         # %r9 = exponent
-    irmovq    $2, %r10        # %r10 = modulo
-
-init:
-    irmovq    stack, %rbp
-    irmovq    stack, %rsp
-
-# REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers 13+.
-main:
-    irmovq    $111, %rsi
-    irmovq    $6, %rdi
-    call      multiply
-    
-    # base := base % modulo
-    
-    
-done:
-    halt
-
-# Fast modulo: %rax = %rsi mod %rdi
-fast_modulo:
-    rrmovq    %rsi, %rax      # store the result in accumulator %rax
-    rrmovq    %rsi, %rcx      # Copy the dividend       
-    subq      %rdi, %rcx      # check for early return
-    jl        modulo_done     # divisor larger than dividend -> do nothing
-    rrmovq    %rdi, %rcx      # %rcx = mutable divisor copy for doubling
-    
-modulo_loop:
-    rrmovq    %rax, %rdx      # Temp of result
-    subq      %rcx, %rdx      # check if goes to zero or less
-    cmovge    %rdx, %rax      # update modulo if zero or above
-    jle       modulo_done     # result was zero or below
-
-update_divisor:
-    addq      %rcx, %rcx      # double the divisor
-    rrmovq    %rcx, %rbx      # a temp for testing
-    xorq      %rsi, %rbx      # flips OF if the sign changed (should go negative only if the MSB differs)
-    jl        reset_divisor
-    rrmovq    %rcx, %rbx      # a temp for testing
-    subq      %rax, %rbx      # check if divisor is larger than current dividend
-    jg        reset_divisor
-    jmp       modulo_loop
-    
-reset_divisor:
-    rrmovq    %rdi, %rcx       # reset original divisor from %r9
-    jmp       modulo_loop
-
-modulo_done:
-    ret
-
-# Multiply the values in %rsi and %rdi: %rax = %rsi * %rsi
-multiply:
-    xorq      %rax, %rax                    # Initialize accumulator %rax = 0
-    andq      %rsi, %rsi                    # Zero check operands for early return
-    je        multiply_done
-    andq      %rdi, %rdi                    # %rdi = the shifted operarand
-    je        multiply_done
-    irmovq    full_bit_mask, %rcx           # Address of full bit mask
-    mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
-    irmovq    first_bit_mask, %rcx          # Address of first bit mask
-    mrmovq    0(%rcx), %rbx                 # %rbx = first bit mask
-
-multiply_loop:
-    rrmovq    %rsi, %rcx                     # temp of operand
-    andq      %rdx, %rcx                     # Mask with full mask to see if any terms remain
-    je        multiply_done                  # No more terms
-    andq      %rbx, %rcx                     # Use small mask to check current term
-    je        do_them_shifts                 # A term was 0
-    addq      %rdi, %rax                     # result += current shift of the operand
-    
-do_them_shifts:
-    addq      %rdx, %rdx                     # Left shift relevant registers      
-    addq      %rbx, %rbx
-    addq      %rdi, %rdi
-    jmp       multiply_loop
-    
-multiply_done:
-    ret                                      # Return result in %rax
-
-.pos 0x300
-full_bit_mask:
-    .quad     0xFFFFFFFFFFFFFFFF             # Constant: Full bit mask
 first_bit_mask:
     .quad     1                              # Constant: First bit mask
 
