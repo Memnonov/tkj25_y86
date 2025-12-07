@@ -47,7 +47,7 @@ loop:
     rrmovq    %r8, %rdi      # 1. argument of multiply = base
     call      multiply
     rrmovq    %rax, %rsi     # Set result as 1. argument of fast_modulo
-    rrmovq    %r10, %rdi     # 2. argument of fast_modulo = modulo
+#    rrmovq    %r10, %rdi     # 2. argument of fast_modulo = modulo
     call      fast_modulo
     rrmovq    %rax, %r11     # Update main result
  
@@ -60,7 +60,7 @@ update_params:
     rrmovq    %r8, %rdi      # 1. argument of multiply = base
     call      multiply       # base * base
     rrmovq    %rax, %rsi     # 1. argument of fast_modulo = base * base
-    rrmovq    %r10, %rdi     # 2. argument of fast_modulo = modulo
+    ´rrmoq    %r10, %rdi     # 2. argument of fast_modulo = modulo
     call      fast_modulo    # (base * base) % modulo
     rrmovq    %rax, %r8      # Update base
     jmp       loop
@@ -73,9 +73,9 @@ done:
 fast_modulo:
     rrmovq    %rsi, %rax      # store the result in accumulator %rax
     rrmovq    %rsi, %rcx      # Copy the dividend       
-    subq      %rdi, %rcx      # check for early return
+    subq      %r10, %rcx      # check for early return
     jl        modulo_done     # divisor larger than dividend -> do nothing
-    rrmovq    %rdi, %rcx      # %rcx = mutable divisor copy for doubling
+    rrmovq    %r10, %rcx      # %rcx = mutable divisor copy for doubling
     
 modulo_loop:
     rrmovq    %rax, %rdx      # Temp of result
@@ -90,11 +90,11 @@ update_divisor:
     jl        reset_divisor
     rrmovq    %rcx, %rbx      # a temp for testing
     subq      %rax, %rbx      # check if divisor is larger than current dividend
-    jg        reset_divisor
+    jg        reset_divisor   # TODO: a conditional move is enough?
     jmp       modulo_loop
     
 reset_divisor:
-    rrmovq    %rdi, %rcx       # reset original divisor from %r9
+    rrmovq    %r10, %rcx       # reset original divisor from %r10 = modulo
     jmp       modulo_loop
 
 modulo_done:
@@ -103,10 +103,10 @@ modulo_done:
 # Multiply the values in %rsi and %rdi: %rax = %rsi * %rsi
 multiply:
     xorq      %rax, %rax                    # Initialize accumulator %rax = 0
-    andq      %rsi, %rsi                    # Zero check operands for early return
-    je        multiply_done
-    andq      %rdi, %rdi                    # %rdi = the shifted operarand
-    je        multiply_done
+#    andq      %rsi, %rsi                    # Zero check operands for early return
+#    je        multiply_done
+#    andq      %rdi, %rdi                    # %rdi = the shifted operarand
+#    je        multiply_done
     #irmovq    full_bit_mask, %rcx           # Address of full bit mask
     #mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
     irmovq    $1, %rbx                      # %rbx = single bit mask
