@@ -1,25 +1,34 @@
-main: # %r8 = original dividend, %r9 = original divisor
+init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
 
-    rrmovq    %r8, %rax       # store the result in accumulator %rax
-    rrmovq    %r8, %rbx       
-    subq      %r9, %rbx       # check for early return
-    jl        done            # divisor larger than dividend -> do nothing
-    rrmovq    %r9, %rcx       # %rcx = mutable divisor copy for doubling
-
-loop:
-    rrmovq    %rax, %rdx      # temp of the result
-    subq      %rcx, %rdx      # check if goes to zero or less
-    cmove     %rdx, %rax      # update modulo if non-negative
-    je        done            # an even result
-    jl        done
-    rrmovq    %rdx, %rax      # update result, if not done
-    call      update_divisor
-    jmp       loop
+# REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers.
+main:
+    irmovq    $0xFFFFFFFFFFFFFFFF, %r11     # Constant: %r11 = Full mask
+    irmovq    $0x1, %r12                    # Constant: %r12 = First bit mask
     
+    irmovq    $666, %rsi                      # Set testing constants
+    irmovq    $77, %rdi
+    
+    #call      multiply
+    call      fast_modulo
+
 done:
     halt
+
+# Fast modulo: %rax = %rsi mod %rdi
+fast_modulo:
+    rrmovq    %rsi, %rax      # store the result in accumulator %rax
+    rrmovq    %rsi, %rcx      # Copy the dividend       
+    subq      %rdi, %rcx      # check for early return
+    jl        modulo_done     # divisor larger than dividend -> do nothing
+    rrmovq    %rdi, %rcx      # %rcx = mutable divisor copy for doubling
+    
+modulo_loop:
+    rrmovq    %rax, %rdx      # Temp of result
+    subq      %rcx, %rdx      # check if goes to zero or less
+    cmovge    %rdx, %rax      # update modulo if zero or above
+    jle       modulo_done     # result was zero or below
 
 update_divisor:
     addq      %rcx, %rcx      # double the divisor
@@ -27,13 +36,45 @@ update_divisor:
     xorq      %r9, %rbx       # flips OF if the sign changed
     jl        reset_divisor
     rrmovq    %rax, %rbx      # a temp for testing
-    subq      %rcx, %rbx     # check if divisor is larger than current dividend
+    subq      %rcx, %rbx      # check if divisor is larger than current dividend
     jl        reset_divisor
+    jmp       modulo_loop
+    
+reset_divisor:
+    rrmovq    %rdi, %rcx       # reset original divisor from %r9
+    jmp       modulo_loop
+
+modulo_done:
     ret
 
-reset_divisor:
-    rrmovq    %r9, %rcx       # reset original divisor from %r9
-    ret
+
+
+# Multiply the values in %rsi and %rdi: %rax = %rsi * %rsi
+multiply:
+    xorq      %rax, %rax                    # Initialize accumulator %rax = 0
+    andq      %rsi, %rsi                    # Zero check operands for early return
+    je        multiply_done
+    andq      %rdi, %rdi                    # %rdi = the shifted operarand
+    je        multiply_done
+    rrmovq    %r11, %rdx                    # %rdx = full mask
+    rrmovq    %r12, %rbx                    # %rbx = first_bit_mask
+
+multiply_loop:
+    rrmovq    %rsi, %rcx                     # temp of operand
+    andq      %rdx, %rcx                     # Mask with full mask to see if any terms remain
+    je        multiply_done                  # No more terms
+    andq      %rbx, %rcx                     # Use small mask to check current term
+    je        do_them_shifts                 # A term was 0
+    addq      %rdi, %rax                     # result += current shift of the operand
+    
+do_them_shifts:
+    addq      %rdx, %rdx                     # Left shift relevant registers      
+    addq      %rbx, %rbx
+    addq      %rdi, %rdi
+    jmp       multiply_loop
+    
+multiply_done:
+    ret                                      # Return result in %rax
 
 .pos 0x400
 stack:
