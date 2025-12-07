@@ -10,12 +10,6 @@ init:
 
 # REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers 13+.
 main:
-    irmovq    $0xFFFFFFFFFFFFFFFF, %r11     # Constant: %r11 = Full mask
-    irmovq    $0x1, %r12                    # Constant: %r12 = First bit mask
-    
-    #rrmovq    %r11, %r13     # Copy of full mask for main
-    #rrmovq    %r12, %r14     # Copy of first bit mask for main
-    
     irmovq    $111, %rsi
     irmovq    $6, %rdi
     call      multiply
