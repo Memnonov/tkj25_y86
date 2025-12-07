@@ -1,13 +1,13 @@
 # TODO: Using the return value registers could be optimized.
 #       Now we often have to move the result value to be used
 #       as the first value of the next subroutine call.
-
-.pos 0
-test_setup:
-    irmovq    $4, %r8         # %r8 = base
-    irmovq    $3, %r9         # %r9 = exponent
-    irmovq    $3, %r10        # %r10 = modulo
-
+#
+#.pos 0
+#test_setup:
+#    irmovq    $4, %r8         # %r8 = base
+#    irmovq    $3, %r9         # %r9 = exponent
+#    irmovq    $3, %r10        # %r10 = modulo
+#
 init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
@@ -94,9 +94,9 @@ update_divisor:
     cmovg     %r10, %rcx      # Reset divisor if too large
     jmp       modulo_loop
     
-#reset_divisor:
-#    rrmovq    %r10, %rcx       # reset original divisor from %r10 = modulo
-#    jmp       modulo_loop
+reset_divisor:
+    rrmovq    %r10, %rcx       # reset original divisor from %r10 = modulo
+    jmp       modulo_loop
 
 modulo_done:
     ret
