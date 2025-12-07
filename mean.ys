@@ -1,0 +1,33 @@
+main:                         # sums the stack
+    xorq      %rdi, %rdi      # init sum = 0
+    xorq      %rsi, %rsi      # init count = 0
+    irmovq    $1, %rcx        # constant 1
+    
+sum_loop:
+    rrmovq    %rsp, %rax      # tmp for boundary check
+    subq      %rbp, %rax      # compare ptrs
+    je        divide          # empty stack
+    popq      %rax            # pop the top
+    addq      %rax, %rdi      # add to sum
+    addq      %rcx, %rsi      # increment counter
+    jmp       sum_loop
+
+divide:                 # integer division: %rdi/%rsi
+    xorq   %rax, %rax   # initialize result = 0
+    andq   %rsi, %rsi   # zero check divisor
+    je     done         # division by zero!
+    andq   %rdi, %rdi   # zero check dividend
+    je     done     # nothing to divide
+    irmovq $1, %rcx     # counter step = 1
+    
+div_loop:
+    subq   %rsi, %rdi   # subtract divisor from dividend
+    jl     done         # went negative, no increment
+    addq   %rcx, %rax   # increment result
+    jmp    div_loop     # iterate
+
+done:
+    halt
+
+.pos 0x400
+stack:

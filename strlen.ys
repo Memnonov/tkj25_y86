@@ -1,0 +1,17 @@
+main:
+    xorq     %rax, %rax      # init accumulator
+    irmovq   $0x400, %rdi    # ptr to start of array
+    irmovq   $8, %rcx        # memory offset = 8
+    irmovq   $1, %rbx        # constant 1
+    
+loop:
+    mrmovq   0(%rdi), %rdx  # dereference array ptr
+    andq     %rdx, %rdx     # check for \0
+    je       done
+    addq     %rbx, %rax     # increment accumulator
+    addq     %rcx, %rdi     # move ptr
+    jmp      loop
+    
+done:
+    halt
+

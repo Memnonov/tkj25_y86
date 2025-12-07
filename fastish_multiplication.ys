@@ -1,0 +1,35 @@
+init:                                       # %r8 = operand to be shifted, %r9 = the other
+    irmovq    stack, %rbp
+    irmovq    stack, %rsp
+    irmovq    $0xFFFFFFFFFFFFFFFF, %r8      # A full mask
+    irmovq    $0x0000000000000001, %r9      # A single bit mask for current idx
+    rrmovq    %r11, %rcx                    # A mutable copy of the shiftee in %rcx
+
+main:
+    xorq      %rax, %rax                    # Initialize accumulator as result = 0
+    andq      %r11, %r11                    # Zero check operands for early return
+    je        done
+    andq      %r12, %r12
+    je        done
+
+loop:
+    rrmovq    %r12, %rdx                     # temp of operand
+    andq      %r8, %rdx                      # Mask with full mask to see if any terms remain
+    je        done                           # No more terms
+    rrmovq    %r12, %rdx                     # another tmp
+    andq      %r9, %rdx                      # Use small mask to check current term
+    je        do_them_shifts                 # A term was 0
+    addq      %rcx, %rax                     # Add current shift of the operand to result
+    
+do_them_shifts:
+    addq      %r8, %r8            
+    addq      %r9, %r9
+    addq      %rcx, %rcx
+    jmp       loop
+    
+done:
+    halt
+
+.pos 0x400
+stack:
+

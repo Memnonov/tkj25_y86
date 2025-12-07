@@ -1,0 +1,39 @@
+main: # %r8 = original dividend, %r9 = original divisor
+    irmovq    stack, %rbp
+    irmovq    stack, %rsp
+
+    rrmovq    %r8, %rax       # store the result in accumulator %rax
+    rrmovq    %r8, %rbx       
+    subq      %r9, %rbx       # check for early return
+    jl        done            # divisor larger than dividend -> do nothing
+    rrmovq    %r9, %rcx       # %rcx = mutable divisor copy for doubling
+
+loop:
+    rrmovq    %rax, %rdx      # temp of the result
+    subq      %rcx, %rdx      # check if goes to zero or less
+    cmove     %rdx, %rax      # update modulo if non-negative
+    je        done            # an even result
+    jl        done
+    rrmovq    %rdx, %rax      # update result, if not done
+    call      update_divisor
+    jmp       loop
+    
+done:
+    halt
+
+update_divisor:
+    addq      %rcx, %rcx      # double the divisor
+    rrmovq    %rcx, %rbx      # a temp for testing
+    xorq      %r9, %rbx       # flips OF if the sign changed
+    jl        reset_divisor
+    rrmovq    %rax, %rbx      # a temp for testing
+    subq      %rcx, %rbx     # check if divisor is larger than current dividend
+    jl        reset_divisor
+    ret
+
+reset_divisor:
+    rrmovq    %r9, %rcx       # reset original divisor from %r9
+    ret
+
+.pos 0x400
+stack:

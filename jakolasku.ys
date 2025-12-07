@@ -1,0 +1,16 @@
+main:                   # integer division
+    xorq   %rax, %rax   # initialize result = 0
+    andq   %rsi, %rsi   # zero check divisor
+    je     done         # division by zero!
+    andq   %rdi, %rdi   # zero check dividend
+    je     done         # nothing to divide
+    irmovq $1, %rcx     # counter step = 1
+    
+loop:
+    subq   %rsi, %rdi   # subtract divisor from dividend
+    jl     done         # went negative, no increment
+    addq   %rcx, %rax   # increment result
+    jmp    loop         # iterate
+
+done:
+    halt                # that'll do computer. that'll do.

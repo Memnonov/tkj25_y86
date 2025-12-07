@@ -1,0 +1,42 @@
+main:
+    irmovq    stack, %rbp
+    irmovq    stack, %rsp
+
+    rrmovq    %r13, %r14         # init R[11:0]
+    irmovq    $0xF000, %rsi      # E[3:0] mask
+    irmovq    $0x0FFF, %rdi      # R[11:] mask
+    call      apply_masks
+    
+    irmovq    $0x1000, %rsi      # divisor for >> 13
+    rrmovq    %r14, %rdi         # set E[3:0] as dividend
+    call      divide
+    rrmovq    %rax, %r14         # move result
+    
+done:
+    halt
+    
+apply_masks:
+    andq     %rdi, %r13
+    andq     %rsi, %r14
+    ret
+
+divide:
+    xorq   %rax, %rax   # initialize result = 0
+    andq   %rsi, %rsi   # zero check divisor
+    je     div_done          # division by zero!
+    andq   %rdi, %rdi   # zero check dividend
+    je     div_done          # nothing to divide
+    irmovq $1, %rcx     # counter step = 1
+    
+div_loop:
+    subq   %rsi, %rdi   # subtract divisor from dividend
+    jl     div_done          # went negative, no increment
+    addq   %rcx, %rax   # increment result
+    jmp    div_loop     # iterate
+
+div_done:
+    ret
+
+.pos 0x400
+stack:
+

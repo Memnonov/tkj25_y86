@@ -1,0 +1,15 @@
+main:
+    xorq   %rax, %rax   # initialize sum = 0
+    irmovq $1, %rcx     # loop step = 1
+    andq   %rdi, %rdi   # zero check
+    je     done         # no iterations > early return
+    andq   %rsi, %rsi   # zero check
+    je     done         # no iterations > early return
+
+loop:
+    addq   %rsi, %rax   # increment by operand
+    subq   %rcx, %rdi   # decrement counter
+    jne    loop
+
+done:
+    halt

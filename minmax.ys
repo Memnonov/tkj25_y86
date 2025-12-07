@@ -1,0 +1,33 @@
+main:
+    # init min = max = stack[0], 0 if stack is empty?
+    mrmovq    0(%rsp), %rsi
+    mrmovq    0(%rsp), %rdi
+
+loop:
+    rrmovq    %rsp, %rax    # move to tmp
+    subq      %rbp, %rax    # compare stack ptrs
+    je        done          # empty stack
+    popq      %rax          # pop the top
+
+    #check_min:
+    rrmovq    %rax, %rcx    # move to a temp
+    subq      %rsi, %rcx    # compare to min
+    jl        update_min    # found a new min
+
+    #check_max:
+    rrmovq    %rdi, %rcx    # move to a temp
+    subq      %rax, %rcx    # compare to max
+    jl        update_max    # found a new max
+    jmp       loop
+
+update_min:
+    rrmovq    %rax, %rsi    # move to min
+    jmp       loop
+    
+update_max:
+    rrmovq    %rax, %rdi    # move to max
+    jmp       loop
+    
+done:
+    halt
+
