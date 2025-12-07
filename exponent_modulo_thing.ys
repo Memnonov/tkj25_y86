@@ -2,21 +2,55 @@ init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
 
+# REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers.
 main:
     irmovq    $0xFFFFFFFFFFFFFFFF, %r11     # Constant: %r11 = Full mask
     irmovq    $0x1, %r12                    # Constant: %r12 = First bit mask
     
-    irmovq    $112, %rsi                      # Set testing constants
-    irmovq    $6969, %rdi
+    irmovq    $666, %rsi                      # Set testing constants
+    irmovq    $77, %rdi
     
-    call      multiply
+    #call      multiply
+    call      fast_modulo
 
 done:
     halt
 
-# Multiply the values in %rsi and %rdi: %rdi = %rsi * %rsi
+# Fast modulo: %rax = %rsi mod %rdi
+fast_modulo:
+    rrmovq    %rsi, %rax      # store the result in accumulator %rax
+    rrmovq    %rsi, %rcx      # Copy the dividend       
+    subq      %rdi, %rcx      # check for early return
+    jl        modulo_done     # divisor larger than dividend -> do nothing
+    rrmovq    %rdi, %rcx      # %rcx = mutable divisor copy for doubling
+    
+modulo_loop:
+    rrmovq    %rax, %rdx      # Temp of result
+    subq      %rcx, %rdx      # check if goes to zero or less
+    cmovge    %rdx, %rax      # update modulo if zero or above
+    jle       modulo_done     # result was zero or below
+
+update_divisor:
+    addq      %rcx, %rcx      # double the divisor
+    rrmovq    %rcx, %rbx      # a temp for testing
+    xorq      %rsi, %rbx      # flips OF if the sign changed (should go negative only if the MSB differs)
+    jl        reset_divisor
+    rrmovq    %rcx, %rbx      # a temp for testing
+    subq      %rax, %rbx      # check if divisor is larger than current dividend
+    jg        reset_divisor
+    jmp       modulo_loop
+    
+reset_divisor:
+    rrmovq    %rdi, %rcx       # reset original divisor from %r9
+    jmp       modulo_loop
+
+modulo_done:
+    ret
+
+
+# Multiply the values in %rsi and %rdi: %rax = %rsi * %rsi
 multiply:
-    xorq      %rax, %rax                    # Initialize accumulator as result = 0
+    xorq      %rax, %rax                    # Initialize accumulator %rax = 0
     andq      %rsi, %rsi                    # Zero check operands for early return
     je        multiply_done
     andq      %rdi, %rdi                    # %rdi = the shifted operarand
@@ -39,16 +73,7 @@ do_them_shifts:
     jmp       multiply_loop
     
 multiply_done:
-    rrmovq    %rax, %rdi                     # Return result in %rdi
-    ret
+    ret                                      # Return result in %rax
 
 .pos 0x400
 stack:
-
-.pos 0x408
-full_mask:
-    .quad 0xFFFFFFFFFFFFFFFF
-
-.pos 0x410
-first_bit_mask:
-    .quad 1
