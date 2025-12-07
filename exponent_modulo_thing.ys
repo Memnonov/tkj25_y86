@@ -1,13 +1,13 @@
 # TODO: Using the return value registers could be optimized.
 #       Now we often have to move the result value to be used
 #       as the first value of the next subroutine call.
-#
-#.pos 0
-#test_setup:
-#    irmovq    $4, %r8         # %r8 = base
-#    irmovq    $3, %r9         # %r9 = exponent
-#    irmovq    $3, %r10        # %r10 = modulo
-#
+
+.pos 0
+test_setup:
+    irmovq    $4, %r8         # %r8 = base
+    irmovq    $3, %r9         # %r9 = exponent
+    irmovq    $3, %r10        # %r10 = modulo
+
 init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
@@ -85,6 +85,7 @@ modulo_loop:
 
 update_divisor:
     addq      %rcx, %rcx      # double the divisor
+    addq      %rcx, %rcx      # quadruple the divisor, more aggressive!
     rrmovq    %rcx, %rbx      # a temp for testing
     xorq      %rsi, %rbx      # flips OF if the sign changed (should go negative only if the MSB differs)
     jl        reset_divisor
