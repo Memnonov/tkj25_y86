@@ -29,7 +29,6 @@ main:
     irmovq    $1, %r11        # %r11 = Result accumulator
     
     # Initialize masks
-    mrmovq    0(%rcx), %r12                 # %r12 = full bit mask
     irmovq    first_bit_mask, %rcx          # Address of first bit mask
     mrmovq    0(%rcx), %r13                 # %r13 = first bit mask
     
@@ -54,7 +53,6 @@ loop:
  
 update_params:
     # Shift iteration masks
-    addq      %r12, %r12     # Shift full bit mask
     addq      %r13, %r13     # Shift first bit mask
     
     # base := base * base % modulo
