@@ -18,6 +18,7 @@ main:
     #irmovq    $111, %rsi
     #irmovq    $6, %rdi
     #call      multiply
+    #halt
     
     # Calculate and assign base := base % modulo
     rrmovq    %r8, %rsi
@@ -29,8 +30,7 @@ main:
     irmovq    $1, %r11        # %r11 = Result accumulator
     
     # Initialize masks
-    irmovq    first_bit_mask, %rcx          # Address of first bit mask
-    mrmovq    0(%rcx), %r13                 # %r13 = first bit mask
+    irmovq    $1, %r13        # %r13 = first bit mask
     
 loop:
     # Iterate for every relevant bit in the exponent
@@ -109,8 +109,9 @@ multiply:
     je        multiply_done
     #irmovq    full_bit_mask, %rcx           # Address of full bit mask
     #mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
-    irmovq    first_bit_mask, %rcx          # Address of first bit mask
-    mrmovq    0(%rcx), %rbx                 # %rbx = first bit mask
+    irmovq    $1, %rbx                      # %rbx = single bit mask
+#    irmovq    first_bit_mask, %rcx          # Address of first bit mask
+#    mrmovq    0(%rcx), %rbx                 # %rbx = first bit mask
 
 multiply_loop:
     rrmovq    %rsi, %rcx                     # temp of operand
@@ -131,9 +132,9 @@ do_them_shifts:
 multiply_done:
     ret                                      # Return result in %rax
 
-.pos 0x300
-first_bit_mask:
-    .quad     1                              # Constant: First bit mask
+#.pos 0x300
+#first_bit_mask:
+#    .quad     1                              # Constant: First bit mask
 
 .pos 0x400
 stack:
