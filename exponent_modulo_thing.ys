@@ -1,28 +1,18 @@
-.pos 0
-test_setup:
-    irmovq    $2, %r8         # %r8 = base
-    irmovq    $3, %r9         # %r9 = exponent
-    irmovq    $2, %r10        # %r10 = modulo
-
 init:
     irmovq    stack, %rbp
     irmovq    stack, %rsp
 
-# REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers 13+.
+# REMEMBER: %rax through %rdi equal DANGER ZONE! Save important stuff in nbr registers.
 main:
     irmovq    $0xFFFFFFFFFFFFFFFF, %r11     # Constant: %r11 = Full mask
     irmovq    $0x1, %r12                    # Constant: %r12 = First bit mask
     
-    #rrmovq    %r11, %r13     # Copy of full mask for main
-    #rrmovq    %r12, %r14     # Copy of first bit mask for main
+    irmovq    $666, %rsi                      # Set testing constants
+    irmovq    $77, %rdi
     
-    irmovq    $111, %rsi
-    irmovq    $6, %rdi
-    call      multiply
-    
-    # base := base % modulo
-    
-    
+    #call      multiply
+    call      fast_modulo
+
 done:
     halt
 
@@ -57,6 +47,7 @@ reset_divisor:
 modulo_done:
     ret
 
+
 # Multiply the values in %rsi and %rdi: %rax = %rsi * %rsi
 multiply:
     xorq      %rax, %rax                    # Initialize accumulator %rax = 0
@@ -64,10 +55,8 @@ multiply:
     je        multiply_done
     andq      %rdi, %rdi                    # %rdi = the shifted operarand
     je        multiply_done
-    irmovq    full_bit_mask, %rcx           # Address of full bit mask
-    mrmovq    0(%rcx), %rdx                 # %rdx = full bit mask
-    irmovq    first_bit_mask, %rcx          # Address of first bit mask
-    mrmovq    0(%rcx), %rbx                 # %rbx = first bit mask
+    rrmovq    %r11, %rdx                    # %rdx = full mask
+    rrmovq    %r12, %rbx                    # %rbx = first_bit_mask
 
 multiply_loop:
     rrmovq    %rsi, %rcx                     # temp of operand
@@ -85,12 +74,6 @@ do_them_shifts:
     
 multiply_done:
     ret                                      # Return result in %rax
-
-.pos 0x300
-full_bit_mask:
-    .quad     0xFFFFFFFFFFFFFFFF             # Constant: Full bit mask
-first_bit_mask:
-    .quad     1                              # Constant: First bit mask
 
 .pos 0x400
 stack:
