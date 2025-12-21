@@ -4,6 +4,12 @@
 #     multiply(a, b)                 : %rsi = a, %rdi = b
 #     halve(dividend)                : %rsi = dividend
 #     fast_modulo(dividend, modulo)  : %rsi = dividend, %rdi =  modulo
+# Calling Conventions
+
+# Arguments:
+#     multiply(a, b)                 : %rsi = a, %rdi = b
+#     halve(dividend)                : %rsi = dividend
+#     fast_modulo(dividend, modulo)  : %rsi = dividend, %rdi =  modulo
 #     modpow(base, exponent, modulo) : %rsi = base, %rbx = exponent, %rdi = modulo
 
 # Return values: %rax
@@ -174,10 +180,10 @@ miller_rabin_done:
 # clobbers: %rax, %r8, %r9, %r10
 multiply:
     # Early return zero checks could/should be removed if they aren't needed!
-    andq       %rsi, %rsi                    # Zero check operands for early return
-    je         multiply_done
-    andq       %rdi, %rdi                    # %rdi = the shifted operarand
-    je         multiply_done
+    #andq       %rsi, %rsi                    # Zero check operands for early return
+    #je         multiply_done
+    #andq       %rdi, %rdi                    # %rdi = the shifted operarand
+    #je         multiply_done
     irmovq     $0x1, %r8                     # init bit mask in %rbx
     rrmovq     %rdi, %r10                    # init mutable temp of the second operand
     xorq       %rax, %rax                    # init accumulator %rax = 0
@@ -246,9 +252,10 @@ modulo_loop:
 update_divisor:
     addq      %r8, %r8        # double the divisor (might need to quadruple this!)
     addq      %r8, %r8        # quadruple!
-    rrmovq    %r8, %r9        # a temp for testing
-    xorq      %rdi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
-    jl        reset_divisor
+    #rrmovq    %r8, %r9        # a temp for testing
+    # Safety always off...
+    #xorq      %rdi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
+    #jl        reset_divisor
     rrmovq    %r8, %r9        # a temp for testing
     subq      %rax, %r9       # check if divisor is larger than current dividend
     jg        reset_divisor
@@ -353,7 +360,8 @@ witnesses:
 #input_array:
 #.align 8
 ##.quad 1 # not prime!
-#.quad 2 # even
+##.quad 2 # even
 ##.quad 9 # not prime
 ##.quad 1
+#.quad 8335
 #.quad 0
