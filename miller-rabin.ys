@@ -12,12 +12,12 @@
 
 # Globals / Callee-Saved: %rcx, %rdx, %rbx
 
-.pos 0
+#.pos 0
     irmovq    stack, %rbp
     irmovq    stack, %rsp
-    irmovq $0x1800, %r8            # array start at %r8
+#    irmovq $0x1800, %r8            # array start at %r8
 
-test:
+#test:
     #irmovq    $666, %rsi
     #irmovq    $2, %rdi
     #call      multiply
@@ -123,7 +123,7 @@ miller_rabin_round:
     # check if modpow(witness, p, number) != 1
     call      modpow            # modpow(witness, p, candidate)
     subq      %rcx, %rax        # compare result to 1
-    jne       not_prime         # found a COMPOUND
+    jne       compound         # found a COMPOUND
     
 p_halving_loop:
     # Check if (p AND 1)
@@ -341,11 +341,11 @@ witnesses:
 .quad 31
 .quad 37
 
-.pos 0x1800
-input_array:
-.align 8
-.quad 1 # not prime!
-.quad 2 # even
-#.quad 9 # not prime
-.quad 1
-.quad 0
+#.pos 0x1800
+#input_array:
+#.align 8
+#.quad 1 # not prime!
+#.quad 2 # even
+##.quad 9 # not prime
+#.quad 1
+#.quad 0
