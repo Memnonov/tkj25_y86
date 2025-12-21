@@ -12,10 +12,10 @@
 
 # Globals / Callee-Saved: %rcx, %rdx, %rbx
 
-#.pos 0
-    irmovq    stack, %rbp
-    irmovq    stack, %rsp
-#    irmovq $0x1800, %r8            # array start at %r8
+V.pos 0
+V    irmovq    stack, %rbp
+V    irmovq    stack, %rsp
+V    irmovq $0x1800, %r8            # array start at %r8
 
 test:
     #irmovq    $666, %rsi
@@ -52,22 +52,14 @@ input_loop:
     addq      %rax, %rcx                 # increment input pointer by 8
     irmovq    witnesses, %rdx            # reset witness array pointer
 
-    # Check if the candidate is 2
+    # Check if the candidate is even or 1
+    rrmovq    %rdi, %r8                # move temp candidate to %r8
     irmovq    $1, %r9                  # const 1 to %r9
-    rrmovq    %rdi, %r8                # move temp candidate to %r8
-    subq      %r9, %r8                 # subtract 1
-    subq      %r9, %r8                 # subtract 1 again, goes to 0 if 2
-    je        prime_found              # found PRIME 2
-    
-    # Check if even or 1
-    rrmovq    %rdi, %r8                # move temp candidate to %r8
     andq      %r9, %r8                 # %r8 AND &r9
     je        input_loop               # Even -> COMPOUND
     rrmovq    %rdi, %r8                # move temp candidate to %r8
     subq      %r9, %r8                 # compare to 1
     je        input_loop               # candidate was 1, not a PRIME
-   
-
 
 # Inner loop tests a possible prime against witnesses
 witness_loop:
@@ -131,7 +123,7 @@ miller_rabin_round:
     # check if modpow(witness, p, number) != 1
     call      modpow            # modpow(witness, p, candidate)
     subq      %rcx, %rax        # compare result to 1
-    jne       compound         # found a COMPOUND
+    jne       not_prime         # found a COMPOUND
     
 p_halving_loop:
     # Check if (p AND 1)
@@ -349,11 +341,11 @@ witnesses:
 .quad 31
 .quad 37
 
-#.pos 0x1800
-#input_array:
-#.align 8
-##.quad 1 # not prime!
-#.quad 2 # even
-##.quad 9 # not prime
-##.quad 1
-#.quad 0
+.pos 0x1800
+input_array:
+.align 8
+.quad 1 # not prime!
+.quad 2 # even
+#.quad 9 # not prime
+.quad 1
+.quad 0
