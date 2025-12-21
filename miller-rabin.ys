@@ -1,3 +1,17 @@
+# Calling Conventions
+
+# Arguments:
+#     multiply(a, b)                 : %rsi = a, %rdi = b
+#     halve(dividend)                : %rsi = dividend
+#     fast_modulo(dividend, modulo)  : %rsi = dividend, %rdi =  modulo
+#     modpow(base, exponent, modulo) : %rsi = base, %rbx = exponent, %rdi = modulo
+
+# Return values: %rax
+
+# Scratch / Caller-Saved: %rax, %r8 - 14
+
+# Globals / Callee-Saved: %rcx, %rdx, %rbx
+
 .pos 0
     irmovq    stack, %rbp
     irmovq    stack, %rsp
