@@ -38,35 +38,63 @@ main:
     rrmovq    %r8, %rcx                  # move input array pointer to %rxc
     irmovq    $0x1000, %rdx              # witness array pointer to %rdx
 
-# Outer loop
+# Outer loop iterates through the inpu array and validates the values
 input_loop:
+    xorq      %rax, %rax                 # init return value
     mrmovq    0(%rcx), %rsi              # move current prime candidate to %rsi
     andq      %rsi, %rsi                 # check for zero
-    je        done                       # at the end of the input array
+    je        done                       # end of array, no PRIMES -> done
     
     # Update pointers
     irmovq    $8, %rax                   # constant 8 to %rax
-    addq      %rax, %rcx                 # advance input array pointer
+    addq      %rax, %rcx                 # increment input pointer by 8
     irmovq    witnesses, %rdx            # reset witness array pointer
 
-# Inner loop
+    # Check if the candidate is even or 1
+    rrmovq    %rsi, %r8                # move temp candidate to %r8
+    irmovq    $1, %r9                  # const 1 to %r9
+    andq      %r9, %r8                 # %r8 AND &r9
+    je        input_loop               # Even -> COMPOUND
+    rrmovq    %rsi, %r8                # move temp candidate to %r8
+    subq      %r9, %r8                 # compare to 1
+    je        input_loop               # candidate was 1, not a PRIME
+
+# Inner loop tests a possible prime against witnesses
 witness_loop:
-    mrmovq    0(%rdx), %rdi              # move current witness to %rdi
-    andq      %rdi, %rdi                 # at the end of witness array
+    mrmovq    0(%rdx), %rdi            # move current witness to %rdi
+    andq      %rdi, %rdi               # at the end of witness array
     je        input_loop
     
     # Advance witness array pointer
-    irmovq    $8, %rax
-    addq      %rax, %rdx
+    irmovq    $8, %rax                 # const 8 to %rax
+    addq      %rax, %rdx               # increment witness pointer by 8
+    
+    # Check if number >= witness
+    rrmovq    %rsi, %r8                # candidate temp to %r8
+    subq      %rdi, %r8                # compare to witness
+    cmovle    %rsi, %rax               # found a PRIME, return to %rax
+    jle       witness_loop             # no more valid witnesses -> PRIME
+    
+    call      miller_rabin_round         # miller_rabin_round(candidate, witness)
+    andq      %rax, %rax                 # check for zero
+    je        input_loop                 # candidate is a compound
     
     jmp       witness_loop               # iterate over witnesses
-    
 
-
-
-    
 done:
     halt
+
+# Subroutine miller_rabin(long candidate, long witness)
+# candidate in %rsi
+# witness in % rdi
+# clobbers: %rax, %rbx, %r8 - 14
+miller_rabin_round:
+    xorq     %rax, %rax                # init result = 0 'COMPOUND'
+    pushq     %rsi                      # save the candidate
+
+miller_rabin_done:
+    popq      %rsi                      # reset candidate 
+    ret
 
 # Subroutine multiply(long a, long b)
 # a in %rsi
@@ -251,6 +279,7 @@ witnesses:
 .pos 0x1800
 input_array:
 .align 8
-.quad 3
-.quad 7
+.quad 2 # An even number!
+#.quad 9
+#.quad 7
 .quad 0
