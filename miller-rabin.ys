@@ -1,44 +1,51 @@
 .pos 0
     irmovq    stack, %rbp
     irmovq    stack, %rsp
-    
+
+test:
+    #irmovq    $666, %rsi
+    #irmovq    $2, %rdi
+    #call      multiply
+    #rrmovq    %rax, %rsi
+    #call      halve
+    #rrmovq    %rax, %rsi
+    #irmovq    $77, %rdi
+    #call      fast_modulo
+    irmovq     $22, %rsi          # BASE
+    irmovq     $666, %rbx         # EXPONENT
+    irmovq     $15, %rdi          # MODULO
+    call       modpow
+
 main:
-    irmovq    $666, %rsi
-    irmovq    $2, %rdi
-    call      multiply
-    rrmovq    %rax, %rsi
-    call      halve
-    rrmovq    %rax, %rsi
-    irmovq    $77, %rdi
-    call      fast_modulo
     halt
 
 # Subroutine multiply(long a, long b)
 # a in %rsi
 # b in %rdi
 # return value in %rax
-# clobbers: %rax, %rsi, %rdi, %r8
+# clobbers: %rax, %rdi, %r8, %r9, %r10
 multiply:
     # Early return zero checks could/should be removed if they aren't needed!
-    xorq       %rax, %rax                    # Initialize accumulator %rax = 0
     andq       %rsi, %rsi                    # Zero check operands for early return
     je         multiply_done
     andq       %rdi, %rdi                    # %rdi = the shifted operarand
     je         multiply_done
     irmovq     $0x1, %r8                     # init bit mask in %rbx
+    rrmovq     %rdi, %r10                    # init mutable temp of the second operand
+    xorq       %rax, %rax                    # init accumulator %rax = 0
 
 multiply_loop:
-    rrmovq    %rsi, %rcx                     # temp of operand
-    subq      %r8, %rcx                      # Check for relevant bits lef
+    rrmovq    %rsi, %r9                     # temp of operand
+    subq      %r8, %r9                      # Check for relevant bits lef
     jl        multiply_done                  # No more terms
-    rrmovq    %rsi, %rcx                     # temp of operand
-    andq      %r8, %rcx                      # Use mask to check current term
+    rrmovq    %rsi, %r9                     # temp of operand
+    andq      %r8, %r9                      # Use mask to check current term
     je        do_them_shifts                 # A term was 0 -> iterate
-    addq      %rdi, %rax                     # result += current shift of the operand
+    addq      %r10, %rax                     # result += current shift of the operand
     
 do_them_shifts:
     addq      %r8, %r8                     # Left shift mask  
-    addq      %rdi, %rdi                     # Left shift operand
+    addq      %r10, %r10                     # Left shift operand
     jmp       multiply_loop
     
 multiply_done:
@@ -47,18 +54,18 @@ multiply_done:
 # Subroutine halve(long dividend)
 # dividend in %rsi
 # return value in %rax
-# clobbers: %rax, %rsi, %rdi, %r8, %r9
+# clobbers: %rax, %r8, %r9, %r10
 halve:
     irmovq    $0x2, %r8                  # init single bit mask in at 0b10
-    irmovq    $1, %r9                    # init cursor in %rcx at 1
+    irmovq    $1, %r9                    # init cursor in %r9 at 1
     xorq      %rax, %rax                 # init accumulator = 0
     
 halve_loop:
-    rrmovq    %rsi, %rdx                 # tmp of the dividend
-    subq      %r8, %rdx                  # check if any bits remain for processing
+    rrmovq    %rsi, %r10                 # tmp of the dividend
+    subq      %r8, %r10                  # check if any bits remain for processing
     jl        halve_done                 # no more bits to process
-    rrmovq    %rsi, %rdx                 # tmp of the dividend
-    andq      %r8, %rdx                  # check current bit
+    rrmovq    %rsi, %r10                 # tmp of the dividend
+    andq      %r8, %r10                  # check current bit
     je        update_halve_parameters    # current term = 0 -> iterate
     addq      %r9, %rax                  # add cursor to accumulator
     
@@ -70,7 +77,10 @@ update_halve_parameters:
 halve_done:
     ret
 
-# Fast modulo: %rax = %rsi mod %rdi
+# Subroutine fast_modulo(long dividend, long modulo)
+# dividend in %rsi
+# modulo in %rdi
+# clobbers: %rax, %r8, %r9
 fast_modulo:
     rrmovq    %rsi, %rax      # store the result in accumulator %rax
     rrmovq    %rsi, %r9       # Copy the dividend       
@@ -79,15 +89,15 @@ fast_modulo:
     rrmovq    %rdi, %r8       # %r8 = mutable divisor copy for doubling
     
 modulo_loop:
-    rrmovq    %rax, %rdx      # Temp of result
-    subq      %r8, %rdx       # check if goes to zero or less
-    cmovge    %rdx, %rax      # update modulo if zero or above
+    rrmovq    %rax, %r9       # Temp of result
+    subq      %r8, %r9        # check if goes to zero or less
+    cmovge    %r9, %rax       # update modulo if zero or above
     jle       modulo_done     # result was zero or below -> done
 
 update_divisor:
     addq      %r8, %r8        # double the divisor (might need to quadruple this!)
     rrmovq    %r8, %r9        # a temp for testing
-    xorq      %rsi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
+    xorq      %rdi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
     jl        reset_divisor
     rrmovq    %r8, %r9        # a temp for testing
     subq      %rax, %r9       # check if divisor is larger than current dividend
@@ -99,6 +109,73 @@ reset_divisor:
     jmp       modulo_loop
 
 modulo_done:
+    ret
+
+# Subroutine modpow(long base, long, exponent, long modulo)
+# base in %rsi
+# exponent in %rbx (immutable!)
+# modulo in %rdi
+
+# using:    %r14: result accumulator
+#            %r13: bit mask
+#            %r12: modulo
+#            %r11: mutable base
+
+# return value in %rax
+# clobbers %rax, %r8-14
+modpow:
+    # Save copies of arguments to prevent clobbering by subroutines
+    pushq     %rsi            # save unmodified base on the stack
+    rrmovq    %rsi, %r11      # base to %r11
+    rrmovq    %rdi, %r12      # modulo to %r12
+    
+    # Calculate and assign base := base % modulo
+    call      fast_modulo     # arguments already set as fast_modulo(base, modulo)
+    rrmovq    %rax, %r11      # init base
+    
+    # Start from result = 1
+    irmovq    $1, %r14        # %r14 = Result accumulator
+    
+    # Initialize masks
+    irmovq    $0x1, %r13          # init first bit mask
+    
+modpow_loop:
+    # Iterate for every relevant bit in the exponent
+    rrmovq    %rbx, %rax            # Tmp of exponent
+    subq      %r13, %rax            # Check for relevant bits left with mask
+    jl        modpow_done           # No more bits to process
+    rrmovq    %rbx, %rax            # Tmp of exponent
+    andq      %r13, %rax            # Check if current bit is set
+    je        modpow_update_params  # Current bit not set, skip to iteration end
+    
+    # If bit is set: result := result * base % modulo
+    rrmovq    %r14, %rsi            # 1. argument of multiply = result
+    rrmovq    %r11, %rdi            # 2. argument of multiply = base
+    call      multiply              # multiply(result, base)
+    rrmovq    %rax, %rsi            # Set result as 1. argument of fast_modulo
+    rrmovq    %r12, %rdi            # 2. argument of fast_modulo = modulo
+    call      fast_modulo           # fast_modulo(result, modulo)
+    rrmovq    %rax, %r14            # Update main result
+ 
+modpow_update_params:
+    # Shift iteration masks
+    addq      %r13, %r13     # Left shift first bit mask
+    
+    # base := base * base % modulo
+    rrmovq    %r11, %rsi      # 1. argument of multiply = base
+    rrmovq    %r11, %rdi      # 1. argument of multiply = base
+    call      multiply        # multiply(base, base)
+    rrmovq    %rax, %rsi      # 1. argument of fast_modulo = base * base
+    rrmovq    %r12, %rdi      # 2. argument of fast_modulo = modulo
+    call      fast_modulo     # (base * base) % modulo
+    rrmovq    %rax, %r11       # Update base
+    jmp       modpow_loop
+    
+modpow_done:
+    rrmovq    %r14, %rax     # Return result in %rax
+    # restore modified argument values
+    popq      %rsi           # restore base from stack
+    rrmovq    %r12, %rdi     # restore modulo
     ret
 
 .pos 0x400
