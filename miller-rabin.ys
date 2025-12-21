@@ -15,6 +15,7 @@
 .pos 0
     irmovq    stack, %rbp
     irmovq    stack, %rsp
+    irmovq $0x1800, %r8            # array start at %r8
 
 test:
     #irmovq    $666, %rsi
@@ -25,12 +26,46 @@ test:
     #rrmovq    %rax, %rsi
     #irmovq    $77, %rdi
     #call      fast_modulo
-    irmovq     $22, %rsi          # BASE
-    irmovq     $666, %rbx         # EXPONENT
-    irmovq     $15, %rdi          # MODULO
-    call       modpow
+    #irmovq     $22, %rsi          # BASE
+    #irmovq     $666, %rbx         # EXPONENT
+    #irmovq     $15, %rdi          # MODULO
+    #call       modpow
 
+# Main program using:
+#    %rcx    :    pointer to input array
+#    %rdx    :    pointer to witness array
 main:
+    rrmovq    %r8, %rcx                  # move input array pointer to %rxc
+    irmovq    $0x1000, %rdx              # witness array pointer to %rdx
+
+# Outer loop
+input_loop:
+    mrmovq    0(%rcx), %rsi              # move current prime candidate to %rsi
+    andq      %rsi, %rsi                 # check for zero
+    je        done                       # at the end of the input array
+    
+    # Update pointers
+    irmovq    $8, %rax                   # constant 8 to %rax
+    addq      %rax, %rcx                 # advance input array pointer
+    irmovq    witnesses, %rdx            # reset witness array pointer
+
+# Inner loop
+witness_loop:
+    mrmovq    0(%rdx), %rdi              # move current witness to %rdi
+    andq      %rdi, %rdi                 # at the end of witness array
+    je        input_loop
+    
+    # Advance witness array pointer
+    irmovq    $8, %rax
+    addq      %rax, %rdx
+    
+    jmp       witness_loop               # iterate over witnesses
+    
+
+
+
+    
+done:
     halt
 
 # Subroutine multiply(long a, long b)
@@ -186,11 +221,36 @@ modpow_update_params:
     jmp       modpow_loop
     
 modpow_done:
-    rrmovq    %r14, %rax     # Return result in %rax
     # restore modified argument values
     popq      %rsi           # restore base from stack
     rrmovq    %r12, %rdi     # restore modulo
+    
+    rrmovq    %r14, %rax     # Return result in %rax
     ret
 
 .pos 0x400
 stack:
+
+.pos 0x1000
+witnesses:
+# 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37
+.align 8
+.quad 2
+.quad 3
+.quad 5
+.quad 7
+.quad 11
+.quad 13
+.quad 17
+.quad 19
+.quad 23
+.quad 29
+.quad 31
+.quad 37
+
+.pos 0x1800
+input_array:
+.align 8
+.quad 3
+.quad 7
+.quad 0
