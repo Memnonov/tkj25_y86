@@ -1,29 +1,28 @@
 # Calling Conventions
 
 # Arguments:
-#     multiply(a, b)                 : %rsi = a, %rdi = b
-#     halve(dividend)                : %rsi = dividend
-#     fast_modulo(dividend, modulo)  : %rsi = dividend, %rdi =  modulo
-# Calling Conventions
-
-# Arguments:
-#     multiply(a, b)                 : %rsi = a, %rdi = b
-#     halve(dividend)                : %rsi = dividend
-#     fast_modulo(dividend, modulo)  : %rsi = dividend, %rdi =  modulo
-#     modpow(base, exponent, modulo) : %rsi = base, %rbx = exponent, %rdi = modulo
+#     multiply(a, b)                   : %rsi = a, %rdi = b
+#     halve(dividend)                  : %rbx = dividend
+#     fast_modulo(dividend, modulo)    : %rsi = dividend, %rdi =  modulo
+#     modpow(base, exponent, modulo)   : %rsi = base, %rbx = exponent, %rdi = modulo
+#     miller_rabin(candidate, witness) : %rsi = candidate, %rdi = witness
 
 # Return values: %rax
 
-# Scratch / Caller-Saved: %rax, %r8 - 14
+# %rsi and %rdi are used as arguments for subroutine call and
+# are callee-saved during them. Otherwise safety while calls 
+# is enforced by tha caller.
 
-# Globals / Callee-Saved: %rcx, %rdx, %rbx
+# %rbx holds p while doing miller_rabin_rounds.
 
-#.pos 0
+
+
+.pos 0
     irmovq    stack, %rbp
     irmovq    stack, %rsp
-#    irmovq $0x1800, %r8            # array start at %r8
+    irmovq    $0x1800, %r8            # array start at %r8
 
-test:
+testing:
     #irmovq    $666, %rsi
     #irmovq    $2, %rdi
     #call      multiply
@@ -42,20 +41,32 @@ test:
 #    %rdx    :    pointer to witness array
 #    %rsi    :    witness
 #    %rdi    :    candidate
+#
+# Complexity:
+# Most of the main program is pretty negligible compared to the modpow calls
+# made in miller_rabin_round. It is is nested loop, but the input and witness
+# arrays are very small. The heaviest work is done when finding a large
+# enough prime, which means having to iterate through all the witnesses while
+# making expensive calls to miller_rabin_round. If we assume miller_rabin_round
+# to make around 2 calls to modpow, we could expect 22,4k operations times the
+# 13 witness numbers which comes to a total of ~290k operations. It seems
+# that in reality many compounds and primes are found more easily based on 
+# the slowest runs in Lovelace being around 240k. This could mean some ~20
+# calls to modpow.
 main:
     rrmovq    %r8, %rcx                  # move input array pointer to %rxc
     irmovq    $0x1000, %rdx              # witness array pointer to %rdx
 
 # Outer loop iterates through the input array and validates the values
 input_loop:
-    xorq      %rax, %rax                 # init return value
-    mrmovq    0(%rcx), %rdi              # move current prime candidate to %rdi
-    andq      %rdi, %rdi                 # check for zero
-    je        done                       # end of array, no PRIMES -> done
+    xorq      %rax, %rax                 # init return value as 0
+    mrmovq    0(%rcx), %rdi              # fetch current prime candidate to %rdi
+    andq      %rdi, %rdi                 # check for terminating zero
+    je        done                       # zero, no PRIMES in input array
     
     # Update pointers
-    irmovq    $8, %rax                   # constant 8 to %rax
-    addq      %rax, %rcx                 # increment input pointer by 8
+    irmovq    $8, %rax                   # array offset 8 to %rax
+    addq      %rax, %rcx                 # increment input pointer
     irmovq    witnesses, %rdx            # reset witness array pointer
 
     # Check if the candidate is 2
@@ -67,7 +78,7 @@ input_loop:
     
     # Check if even or 1
     rrmovq    %rdi, %r8                # move temp candidate to %r8
-    andq      %r9, %r8                 # %r8 AND &r9
+    andq      %r9, %r8                 # check first bit with AND 1
     je        input_loop               # Even -> COMPOUND
     rrmovq    %rdi, %r8                # move temp candidate to %r8
     subq      %r9, %r8                 # compare to 1
@@ -77,43 +88,43 @@ input_loop:
 
 # Inner loop tests a possible prime against witnesses
 witness_loop:
-    mrmovq    0(%rdx), %rsi            # move current witness to %rsi
+    mrmovq    0(%rdx), %rsi            # fetch current witness to %rsi
     andq      %rsi, %rsi               # at the end of witness array
-    je        prime_found              # no more witnesses -> PRIME found
+    je        prime_found              # all tests passed -> PRIME found
     
     # Advance witness array pointer
-    irmovq    $8, %rax                 # const 8 to %rax
+    irmovq    $8, %rax                 # array offset 8 to %rax
     addq      %rax, %rdx               # increment witness pointer by 8
     
     # Check if number >= witness
     rrmovq    %rdi, %r8                # candidate temp to %r8
-    subq      %rsi, %r8                # compare to witness
-    cmovle    %rdi, %rax               # found a PRIME, return to %rax
+    subq      %rsi, %r8                # compare with witness
+    cmovle    %rdi, %rax               # passed all tests with valid witnesses -> PRIME
     jle       witness_loop             # no more valid witnesses -> PRIME
     
     # Save main loop state
-    pushq     %rcx                  # input pointer to stack
-    pushq     %rdx                  # witness pointer to stack
+    pushq     %rcx                     # input pointer to stack
+    pushq     %rdx                     # witness pointer to stack
     
-    call      miller_rabin_round    # miller_rabin_round(candidate, witness)
+    call      miller_rabin_round       # miller_rabin_round(candidate, witness)
 
-    popq      %rdx                  # pop witness pointer from stack
-    popq      %rcx                  # pop input pointer from stack
+    popq      %rdx                     # pop witness pointer from stack
+    popq      %rcx                     # pop input pointer from stack
     
-    andq      %rax, %rax            # check round result
-    je        input_loop            # COMPOUND if zero, next candidate
+    andq      %rax, %rax               # check round result
+    je        input_loop               # COMPOUND if zero -> next candidate
     
-    jmp       witness_loop               # iterate over witnesses
+    jmp       witness_loop             # iterate with next witness
 
 prime_found:
-    rrmovq    %rdi, %rax            # move PRIME to %rax for return
+    rrmovq    %rdi, %rax               # move PRIME to %rax for return
 
 done:
     halt
 
-# Subroutine miller_rabin(long candidate, long witness)
-# candidate in %rsi
-# witness in % rdi
+# Subroutine miller_rabin_round(long candidate, long witness)
+# witness in %rsi
+# candidate in % rdi
 # Using:
 #    %rsi = witness
 #    %rdi = candidate
@@ -121,23 +132,25 @@ done:
 #    %rdx = candidate - 1
 #    %rcx = const 1
 #    The ordering makes calling modpow easy since the witness
-#    will stay nicely in the right register and only p is 
-#    modified by halving when iterating!
+#    and candidate will stay nicely in the right registers and 
+#    only p is modified while iterating!
 # clobbers: %rax, %rbx, %rcx, %rdx, %rbx, %r8 - 14
-miller_rabin_round:
-    # Save arguments unnecessary?
-    #pushq     %rsi                      # save candidate
-    #pushq     %rdi                      # save witness
 
-    irmovq    $1, %rcx               # init const 1 to %rcx
-    rrmovq    %rdi, %rdx             # init candidate - 1 to %rdx
-    subq      %rcx, %rdx
-    rrmovq    %rdx, %rbx             # init p = candidate - 1 to %rbx
+# Performance:
+# The performance is dominated by the calls to modpow while looping.
+# Assuming the costs assumed in other subroutines just having to call
+# modpow twice could mean 22,4k operations. This is expensive but also 
+# very swingy based on how early the compound numbers are caught.
+miller_rabin_round:
+    irmovq    $1, %rcx          # init const 1 to %rcx
+    rrmovq    %rdi, %rdx        # init candidate - 1 to %rdx
+    subq      %rcx, %rdx        # subtract to get candidate - 1
+    rrmovq    %rdx, %rbx        # init p = candidate - 1 to %rbx
 
     # check if modpow(witness, p, number) != 1
     call      modpow            # modpow(witness, p, candidate)
-    subq      %rcx, %rax        # compare result to 1
-    jne       compound         # found a COMPOUND
+    subq      %rcx, %rax        # compare result with 1
+    jne       compound          # found COMPOUND
     
 p_halving_loop:
     # Check if (p AND 1)
@@ -148,14 +161,17 @@ p_halving_loop:
     # Halve p and recheck
     call      halve             # halves the p in %rbx
     call      modpow            # modpow with the halved p
+   
     # Check if (result == 1)
     rrmovq    %rax, %r8         # result temp to %r8
-    subq      %rcx, %r8         # compare to const 1
+    subq      %rcx, %r8         # compare with  1
     je        p_halving_loop    # continue
+    
     # Check if (result == number - 1)
     rrmovq    %rax, %r8         # result temp to %r8
-    subq      %rdx, %r8         # compare to candidate - 1
+    subq      %rdx, %r8         # compare with candidate - 1
     je        prime             # found PRIME
+   
     # Else
     jmp       compound          # found COMPOUND
 
@@ -168,9 +184,6 @@ prime:
     rrmovq    %rcx, %rax        # PRIME -> return const 1
 
 miller_rabin_done:
-    # Reset arguments
-    #popq      %rdi                      # reset witness
-    #popq      %rsi                      # reset candidate
     ret
 
 # Subroutine multiply(long a, long b)
@@ -178,46 +191,54 @@ miller_rabin_done:
 # b in %rdi
 # return value in %rax
 # clobbers: %rax, %r8, %r9, %r10
+# 
+# Complexity:
+# Multiply iterates through all the bits of input a meaning 
+# a worst case of approximately 16 operations per set bit.
+# O(n) scaling where n is the number of bits.
+# A sixteen bit integer like 0bFFFF would take ~10 operations
+# an iteration meaning ~160 operations in total.
 multiply:
-    # Early return zero checks could/should be removed if they aren't needed!
-    #andq       %rsi, %rsi                    # Zero check operands for early return
-    #je         multiply_done
-    #andq       %rdi, %rdi                    # %rdi = the shifted operarand
-    #je         multiply_done
-    irmovq     $0x1, %r8                     # init bit mask in %rbx
-    rrmovq     %rdi, %r10                    # init mutable temp of the second operand
-    xorq       %rax, %rax                    # init accumulator %rax = 0
+    irmovq     $0x1, %r8            # init bit mask in %rbx
+    rrmovq     %rdi, %r10           # init mutable temp of the second operand
+    xorq       %rax, %rax           # init accumulator %rax = 0
 
 multiply_loop:
-    rrmovq    %rsi, %r9                     # temp of operand
-    subq      %r8, %r9                      # Check for relevant bits lef
-    jl        multiply_done                  # No more terms
-    rrmovq    %rsi, %r9                     # temp of operand
-    andq      %r8, %r9                      # Use mask to check current term
-    je        do_them_shifts                 # A term was 0 -> iterate
-    addq      %r10, %rax                     # result += current shift of the operand
+    rrmovq    %rsi, %r9             # temp of operand
+    subq      %r8, %r9              # check for relevant bits left
+    jl        multiply_done         # no more terms
+    rrmovq    %rsi, %r9             # temp of operand
+    andq      %r8, %r9              # use mask to check current term
+    je        do_them_shifts        # term was 0 -> iterate
+    addq      %r10, %rax            # result += shift of the operand
     
 do_them_shifts:
-    addq      %r8, %r8                     # Left shift mask  
-    addq      %r10, %r10                     # Left shift operand
+    addq      %r8, %r8              # left shift mask  
+    addq      %r10, %r10            # left shift operand
     jmp       multiply_loop
     
 multiply_done:
-    ret                                      # Return result in %rax
+    ret                             # return result in %rax
 
 # Subroutine halve(long dividend)
 # dividend in %rbx (%rbx holds p during the miller_rabin_round!)
 # return value in %rax
 # clobbers: %rax, %rbx %r8, %r9, %r10 (side effects in %rbx!)
+#
+# Complexity: 
+# Like with multiply, halves operation cost is mainly determined
+# by the amount of bits we have to iterate through in the dividend.
+# Therefore, O(n) where n is the amount of bits.
+# With ~10 operations per loop, something like 0xFFFF would take ~160 operations.
 halve:
     irmovq    $0x2, %r8                  # init single bit mask in at 0b10
-    irmovq    $1, %r9                    # init cursor in %r9 at 1
-    xorq      %rax, %rax                 # init accumulator = 0
+    irmovq    $1, %r9                    # init cursor in %r9 at 0b01
+    xorq      %rax, %rax                 # init accumulator = 0 in %rax
     
 halve_loop:
     rrmovq    %rbx, %r10                 # tmp of the dividend
-    subq      %r8, %r10                  # check if any bits remain for processing
-    jl        halve_done                 # no more bits to process
+    subq      %r8, %r10                  # check for bits to process
+    jl        halve_done                 # no more bits
     rrmovq    %rbx, %r10                 # tmp of the dividend
     andq      %r8, %r10                  # check current bit
     je        update_halve_parameters    # current term = 0 -> iterate
@@ -236,6 +257,22 @@ halve_done:
 # dividend in %rsi
 # modulo in %rdi
 # clobbers: %rax, %r8, %r9
+#
+# Complexity:
+# This here is potentially a lot more expensive than halving and multiplying.
+# Operations required depend on the difference between the dividend and the
+# modulo. The worst case scenario is moduloing a large integer with 1.
+# A single naive modulo with a large integer like 0xFFFF and 1 
+# could single handedly take more than the optimal 250 000 operations.
+# This is mitigated by doubling the modulo while iteratively decrementing
+# the dividend. In the best case this could lead to O(log n) like 
+# performance, but having to occasionally reset too large divisors 
+# makes it slower. Here lies this subroutines potential for fine-tuning.
+# Aggressively growing the divisor works on very large numbers as was
+# the case in the earlier powmod assignment. Here just doubling it 
+# performed better. This should manage an integer about 0xFFFF with modulo 1 in
+# 16 iterations roughly meaning ~190 operations. The algorithm of course
+# works very well with powers of two by avoiding resets.
 fast_modulo:
     rrmovq    %rsi, %rax      # store the result in accumulator %rax
     rrmovq    %rsi, %r9       # Copy the dividend       
@@ -252,10 +289,6 @@ modulo_loop:
 update_divisor:
     addq      %r8, %r8        # double the divisor (might need to quadruple this!)
     addq      %r8, %r8        # quadruple!
-    #rrmovq    %r8, %r9        # a temp for testing
-    # Safety always off...
-    #xorq      %rdi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
-    #jl        reset_divisor
     rrmovq    %r8, %r9        # a temp for testing
     subq      %rax, %r9       # check if divisor is larger than current dividend
     jg        reset_divisor
@@ -280,60 +313,69 @@ modulo_done:
 
 # return value in %rax
 # clobbers %rax, %r8-14
+#
+# Performance:
+# This subroutine does multiple calls to other helper subroutines making it
+# relatively expensive to run and more difficult to estimate performance-wise.
+# Here the multiply and fast_modulo calls dominate. The fact that this 
+# subroutine also iterates through bits helps with the estimations.
+# Assuming a base of 0xFFFF and using the estimations of multiply and
+# fast_modulo this could take ~700 operations per iteration meaning even
+# ~11200 or more operations in a bad case.  
 modpow:
     # Save copies of arguments to prevent clobbering by subroutines
-    pushq     %rsi            # save unmodified base on the stack
-    rrmovq    %rsi, %r11      # base to %r11
-    rrmovq    %rdi, %r12      # modulo to %r12
+    pushq     %rsi                  # save unmodified base on the stack
+    rrmovq    %rsi, %r11            # base to %r11
+    rrmovq    %rdi, %r12            # modulo to %r12
     
     # Calculate and assign base := base % modulo
-    call      fast_modulo     # arguments already set as fast_modulo(base, modulo)
-    rrmovq    %rax, %r11      # init base
+    call      fast_modulo           # arguments already set fast_modulo(base, modulo)
+    rrmovq    %rax, %r11            # init base in %r11
     
     # Start from result = 1
-    irmovq    $1, %r14        # %r14 = Result accumulator
+    irmovq    $1, %r14              # result accumulator = 1 in %r14
     
     # Initialize masks
-    irmovq    $0x1, %r13          # init first bit mask
+    irmovq    $0x1, %r13            # init bit mask 0b1
     
 modpow_loop:
     # Iterate for every relevant bit in the exponent
-    rrmovq    %rbx, %rax            # Tmp of exponent
-    subq      %r13, %rax            # Check for relevant bits left with mask
-    jl        modpow_done           # No more bits to process
-    rrmovq    %rbx, %rax            # Tmp of exponent
-    andq      %r13, %rax            # Check if current bit is set
-    je        modpow_update_params  # Current bit not set, skip to iteration end
+    rrmovq    %rbx, %rax            # tmp of exponent
+    subq      %r13, %rax            # check for bits to process with mask
+    jl        modpow_done           # no more bits to process
+    rrmovq    %rbx, %rax            # tmp of exponent
+    andq      %r13, %rax            # check if current bit is set
+    je        modpow_update_params  # current bit not set, skip to iteration end
     
     # If bit is set: result := result * base % modulo
     rrmovq    %r14, %rsi            # 1. argument of multiply = result
     rrmovq    %r11, %rdi            # 2. argument of multiply = base
     call      multiply              # multiply(result, base)
-    rrmovq    %rax, %rsi            # Set result as 1. argument of fast_modulo
+    rrmovq    %rax, %rsi            # set result as 1. argument of fast_modulo
     rrmovq    %r12, %rdi            # 2. argument of fast_modulo = modulo
     call      fast_modulo           # fast_modulo(result, modulo)
-    rrmovq    %rax, %r14            # Update main result
+    rrmovq    %rax, %r14            # update main result
  
 modpow_update_params:
     # Shift iteration masks
-    addq      %r13, %r13     # Left shift first bit mask
+    addq      %r13, %r13           # Left shift first bit mask
     
     # base := base * base % modulo
-    rrmovq    %r11, %rsi      # 1. argument of multiply = base
-    rrmovq    %r11, %rdi      # 1. argument of multiply = base
-    call      multiply        # multiply(base, base)
-    rrmovq    %rax, %rsi      # 1. argument of fast_modulo = base * base
-    rrmovq    %r12, %rdi      # 2. argument of fast_modulo = modulo
-    call      fast_modulo     # (base * base) % modulo
-    rrmovq    %rax, %r11       # Update base
+    rrmovq    %r11, %rsi           # 1. argument of multiply = base
+    rrmovq    %r11, %rdi           # 1. argument of multiply = base
+    call      multiply             # multiply(base, base)
+    rrmovq    %rax, %rsi           # 1. argument of fast_modulo = base * base
+    rrmovq    %r12, %rdi           # 2. argument of fast_modulo = modulo
+    call      fast_modulo          # (base * base) % modulo
+    rrmovq    %rax, %r11           # Update base
     jmp       modpow_loop
     
 modpow_done:
     # restore modified argument values
-    popq      %rsi           # restore base from stack
-    rrmovq    %r12, %rdi     # restore modulo
+    popq      %rsi                # restore base from stack
+    rrmovq    %r12, %rdi          # restore modulo
     
-    rrmovq    %r14, %rax     # Return result in %rax
+    rrmovq    %r14, %rax          # return result in %rax
     ret
 
 .pos 0x400
@@ -356,12 +398,12 @@ witnesses:
 .quad 31
 .quad 37
 
-#.pos 0x1800
-#input_array:
-#.align 8
-##.quad 1 # not prime!
-##.quad 2 # even
-##.quad 9 # not prime
-##.quad 1
-#.quad 8335
-#.quad 0
+.pos 0x1800
+input_array:
+.align 8
+#.quad 1 # not prime!
+#.quad 2 # even
+#.quad 9 # not prime
+#.quad 1
+.quad 8335
+.quad 0
