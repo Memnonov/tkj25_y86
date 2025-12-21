@@ -8,6 +8,9 @@ main:
     call      multiply
     rrmovq    %rax, %rsi
     call      halve
+    rrmovq    %rax, %rsi
+    irmovq    $77, %rdi
+    call      fast_modulo
     halt
 
 # Subroutine multiply(long a, long b)
@@ -65,6 +68,37 @@ update_halve_parameters:
    jmp        halve_loop                 # loopidy loop
     
 halve_done:
+    ret
+
+# Fast modulo: %rax = %rsi mod %rdi
+fast_modulo:
+    rrmovq    %rsi, %rax      # store the result in accumulator %rax
+    rrmovq    %rsi, %r9       # Copy the dividend       
+    subq      %rdi, %r9       # check for early return
+    jl        modulo_done     # divisor larger than dividend -> do nothing
+    rrmovq    %rdi, %r8       # %r8 = mutable divisor copy for doubling
+    
+modulo_loop:
+    rrmovq    %rax, %rdx      # Temp of result
+    subq      %r8, %rdx       # check if goes to zero or less
+    cmovge    %rdx, %rax      # update modulo if zero or above
+    jle       modulo_done     # result was zero or below -> done
+
+update_divisor:
+    addq      %r8, %r8        # double the divisor (might need to quadruple this!)
+    rrmovq    %r8, %r9        # a temp for testing
+    xorq      %rsi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
+    jl        reset_divisor
+    rrmovq    %r8, %r9        # a temp for testing
+    subq      %rax, %r9       # check if divisor is larger than current dividend
+    jg        reset_divisor
+    jmp       modulo_loop
+    
+reset_divisor:
+    rrmovq    %rdi, %r8       # reset original divisor from %r9
+    jmp       modulo_loop
+
+modulo_done:
     ret
 
 .pos 0x400
