@@ -1,0 +1,32 @@
+.pos 0
+    irmovq    stack, %rbp
+    irmovq    stack, %rsp
+    
+    irmovq    $128, %rsi
+
+# Subroutine halve(long dividend)
+# dividend in %rsi
+halve:
+    irmovq    $0x2, %r9                  # init single bit mask in at 0b10
+    irmovq    $1, %rcx                   # init cursor in %rcx at 1
+    xorq      %rax, %rax                 # init accumulator = 0
+    
+halve_loop:
+    rrmovq    %rsi, %rdx                  # tmp of the dividend
+    subq      %r9, %rdx                  # check if any bits remain for processing
+    jl        halve_done                 # no more bits to process
+    rrmovq    %rsi, %rdx                  # tmp of the dividend
+    andq      %r9, %rdx                  # check current bit
+    je        update_halve_parameters    # current term = 0 -> iterate
+    addq      %rcx, %rax                 # add cursor to accumulator
+    
+update_halve_parameters:
+   rrmovq     %r9, %rcx                  # make old mask the new cursor
+   addq       %r9, %r9                   # shift the mask
+   jmp        halve_loop                 # loopidy loop
+    
+halve_done:
+    halt
+
+.pos 0x400
+stack:

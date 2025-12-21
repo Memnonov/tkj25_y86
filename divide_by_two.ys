@@ -1,13 +1,19 @@
+#.pos 0
+#    irmovq    stack, %rbp
+#    irmovq    stack, %rsp
+#
+#    irmovq    $2, %r8
+#
 main:
     irmovq    $0x2, %r9                  # start single bit mask in %r9 at 0b10
-    irmovq    $0xFFFFFFFFFFFFFFFE, %r10  # a full mask in %r10 beginning at 0b10
     irmovq    $1, %rcx                   # start cursor in %rcx at 1
     xorq      %rax, %rax                 # init accumulator = 0
     
 loop:
     rrmovq    %r8, %rdx                  # tmp of the dividend
-    andq      %r10, %rdx                 # check if any bits remain for processing
-    je        done                       # no more bits to process
+    subq      %r9, %rdx                  # check if any bits remain for processing
+    jl        done                       # no more bits to process
+    rrmovq    %r8, %rdx                  # tmp of the dividend
     andq      %r9, %rdx                  # check current bit
     je        update_parameters          # current term = 0 -> iterate
     addq      %rcx, %rax                 # add cursor to accumulator
