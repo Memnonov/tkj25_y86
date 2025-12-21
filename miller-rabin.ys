@@ -34,15 +34,17 @@ test:
 # Main program using:
 #    %rcx    :    pointer to input array
 #    %rdx    :    pointer to witness array
+#    %rsi    :    witness
+#    %rdi    :    candidate
 main:
     rrmovq    %r8, %rcx                  # move input array pointer to %rxc
     irmovq    $0x1000, %rdx              # witness array pointer to %rdx
 
-# Outer loop iterates through the inpu array and validates the values
+# Outer loop iterates through the input array and validates the values
 input_loop:
     xorq      %rax, %rax                 # init return value
-    mrmovq    0(%rcx), %rsi              # move current prime candidate to %rsi
-    andq      %rsi, %rsi                 # check for zero
+    mrmovq    0(%rcx), %rdi              # move current prime candidate to %rdi
+    andq      %rdi, %rdi                 # check for zero
     je        done                       # end of array, no PRIMES -> done
     
     # Update pointers
@@ -51,35 +53,46 @@ input_loop:
     irmovq    witnesses, %rdx            # reset witness array pointer
 
     # Check if the candidate is even or 1
-    rrmovq    %rsi, %r8                # move temp candidate to %r8
+    rrmovq    %rdi, %r8                # move temp candidate to %r8
     irmovq    $1, %r9                  # const 1 to %r9
     andq      %r9, %r8                 # %r8 AND &r9
     je        input_loop               # Even -> COMPOUND
-    rrmovq    %rsi, %r8                # move temp candidate to %r8
+    rrmovq    %rdi, %r8                # move temp candidate to %r8
     subq      %r9, %r8                 # compare to 1
     je        input_loop               # candidate was 1, not a PRIME
 
 # Inner loop tests a possible prime against witnesses
 witness_loop:
-    mrmovq    0(%rdx), %rdi            # move current witness to %rdi
-    andq      %rdi, %rdi               # at the end of witness array
-    je        input_loop
+    mrmovq    0(%rdx), %rsi            # move current witness to %rsi
+    andq      %rsi, %rsi               # at the end of witness array
+    je        prime_found              # no more witnesses -> PRIME found
     
     # Advance witness array pointer
     irmovq    $8, %rax                 # const 8 to %rax
     addq      %rax, %rdx               # increment witness pointer by 8
     
     # Check if number >= witness
-    rrmovq    %rsi, %r8                # candidate temp to %r8
-    subq      %rdi, %r8                # compare to witness
-    cmovle    %rsi, %rax               # found a PRIME, return to %rax
+    rrmovq    %rdi, %r8                # candidate temp to %r8
+    subq      %rsi, %r8                # compare to witness
+    cmovle    %rdi, %rax               # found a PRIME, return to %rax
     jle       witness_loop             # no more valid witnesses -> PRIME
     
-    call      miller_rabin_round         # miller_rabin_round(candidate, witness)
-    andq      %rax, %rax                 # check for zero
-    je        input_loop                 # candidate is a compound
+    # Save main loop state
+    pushq     %rcx                  # input pointer to stack
+    pushq     %rdx                  # witness pointer to stack
+    
+    call      miller_rabin_round    # miller_rabin_round(candidate, witness)
+
+    popq      %rdx                  # pop witness pointer from stack
+    popq      %rcx                  # pop input pointer from stack
+    
+    andq      %rax, %rax            # check round result
+    je        input_loop            # COMPOUND if zero, next candidate
     
     jmp       witness_loop               # iterate over witnesses
+
+prime_found:
+    rrmovq    %rdi, %rax            # move PRIME to %rax for return
 
 done:
     halt
@@ -87,20 +100,70 @@ done:
 # Subroutine miller_rabin(long candidate, long witness)
 # candidate in %rsi
 # witness in % rdi
-# clobbers: %rax, %rbx, %r8 - 14
+# Using:
+#    %rsi = witness
+#    %rdi = candidate
+#    %rbx = p
+#    %rdx = candidate - 1
+#    %rcx = const 1
+#    The ordering makes calling modpow easy since the witness
+#    will stay nicely in the right register and only p is 
+#    modified by halving when iterating!
+# clobbers: %rax, %rbx, %rcx, %rdx, %rbx, %r8 - 14
 miller_rabin_round:
-    xorq     %rax, %rax                # init result = 0 'COMPOUND'
-    pushq     %rsi                      # save the candidate
+    # Save arguments unnecessary?
+    #pushq     %rsi                      # save candidate
+    #pushq     %rdi                      # save witness
+
+    irmovq    $1, %rcx               # init const 1 to %rcx
+    rrmovq    %rdi, %rdx             # init candidate - 1 to %rdx
+    subq      %rcx, %rdx
+    rrmovq    %rdx, %rbx             # init p = candidate - 1 to %rbx
+
+    # check if modpow(witness, p, number) != 1
+    call      modpow            # modpow(witness, p, candidate)
+    subq      %rcx, %rax        # compare result to 1
+    jne       not_prime         # found a COMPOUND
+    
+p_halving_loop:
+    # Check if (p AND 1)
+    rrmovq    %rbx, %r8         # temp of p to %r8
+    andq      %rcx, %r8         # p AND 1
+    jne       prime             # p was odd -> PRIME
+    
+    # Halve p and recheck
+    call      halve             # halves the p in %rbx
+    call      modpow            # modpow with the halved p
+    # Check if (result == 1)
+    rrmovq    %rax, %r8         # result temp to %r8
+    subq      %rcx, %r8         # compare to const 1
+    je        p_halving_loop    # continue
+    # Check if (result == number - 1)
+    rrmovq    %rax, %r8         # result temp to %r8
+    subq      %rdx, %r8         # compare to candidate - 1
+    je        prime             # found PRIME
+    # Else
+    jmp       compound          # found COMPOUND
+
+
+compound:
+    irmovq    $0, %rax          # COMPOUND -> return 0
+    jmp       miller_rabin_done
+
+prime:
+    rrmovq    %rcx, %rax        # PRIME -> return const 1
 
 miller_rabin_done:
-    popq      %rsi                      # reset candidate 
+    # Reset arguments
+    #popq      %rdi                      # reset witness
+    #popq      %rsi                      # reset candidate
     ret
 
 # Subroutine multiply(long a, long b)
 # a in %rsi
 # b in %rdi
 # return value in %rax
-# clobbers: %rax, %rdi, %r8, %r9, %r10
+# clobbers: %rax, %r8, %r9, %r10
 multiply:
     # Early return zero checks could/should be removed if they aren't needed!
     andq       %rsi, %rsi                    # Zero check operands for early return
@@ -129,19 +192,19 @@ multiply_done:
     ret                                      # Return result in %rax
 
 # Subroutine halve(long dividend)
-# dividend in %rsi
+# dividend in %rbx (%rbx holds p during the miller_rabin_round!)
 # return value in %rax
-# clobbers: %rax, %r8, %r9, %r10
+# clobbers: %rax, %rbx %r8, %r9, %r10 (side effects in %rbx!)
 halve:
     irmovq    $0x2, %r8                  # init single bit mask in at 0b10
     irmovq    $1, %r9                    # init cursor in %r9 at 1
     xorq      %rax, %rax                 # init accumulator = 0
     
 halve_loop:
-    rrmovq    %rsi, %r10                 # tmp of the dividend
+    rrmovq    %rbx, %r10                 # tmp of the dividend
     subq      %r8, %r10                  # check if any bits remain for processing
     jl        halve_done                 # no more bits to process
-    rrmovq    %rsi, %r10                 # tmp of the dividend
+    rrmovq    %rbx, %r10                 # tmp of the dividend
     andq      %r8, %r10                  # check current bit
     je        update_halve_parameters    # current term = 0 -> iterate
     addq      %r9, %rax                  # add cursor to accumulator
@@ -152,6 +215,7 @@ update_halve_parameters:
    jmp        halve_loop                 # loopidy loop
     
 halve_done:
+    rrmovq    %rax, %rbx                 # result to %rbx for halving p
     ret
 
 # Subroutine fast_modulo(long dividend, long modulo)
@@ -173,6 +237,7 @@ modulo_loop:
 
 update_divisor:
     addq      %r8, %r8        # double the divisor (might need to quadruple this!)
+    addq      %r8, %r8        # quadruple!
     rrmovq    %r8, %r9        # a temp for testing
     xorq      %rdi, %r9       # flips OF if the sign changed (should go negative only if the MSB differs)
     jl        reset_divisor
@@ -193,7 +258,7 @@ modulo_done:
 # exponent in %rbx (immutable!)
 # modulo in %rdi
 
-# using:    %r14: result accumulator
+# using:     %r14: result accumulator
 #            %r13: bit mask
 #            %r12: modulo
 #            %r11: mutable base
@@ -279,7 +344,8 @@ witnesses:
 .pos 0x1800
 input_array:
 .align 8
-.quad 2 # An even number!
-#.quad 9
-#.quad 7
+.quad 1 # not prime!
+.quad 2 # even
+#.quad 9 # not prime
+.quad 1
 .quad 0
