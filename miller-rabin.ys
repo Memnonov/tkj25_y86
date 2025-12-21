@@ -2,31 +2,70 @@
     irmovq    stack, %rbp
     irmovq    stack, %rsp
     
-    irmovq    $128, %rsi
+main:
+    irmovq    $666, %rsi
+    irmovq    $2, %rdi
+    call      multiply
+    rrmovq    %rax, %rsi
+    call      halve
+    halt
+
+# Subroutine multiply(long a, long b)
+# a in %rsi
+# b in %rdi
+# return value in %rax
+# clobbers: %rax, %rsi, %rdi, %r8
+multiply:
+    # Early return zero checks could/should be removed if they aren't needed!
+    xorq       %rax, %rax                    # Initialize accumulator %rax = 0
+    andq       %rsi, %rsi                    # Zero check operands for early return
+    je         multiply_done
+    andq       %rdi, %rdi                    # %rdi = the shifted operarand
+    je         multiply_done
+    irmovq     $0x1, %r8                     # init bit mask in %rbx
+
+multiply_loop:
+    rrmovq    %rsi, %rcx                     # temp of operand
+    subq      %r8, %rcx                      # Check for relevant bits lef
+    jl        multiply_done                  # No more terms
+    rrmovq    %rsi, %rcx                     # temp of operand
+    andq      %r8, %rcx                      # Use mask to check current term
+    je        do_them_shifts                 # A term was 0 -> iterate
+    addq      %rdi, %rax                     # result += current shift of the operand
+    
+do_them_shifts:
+    addq      %r8, %r8                     # Left shift mask  
+    addq      %rdi, %rdi                     # Left shift operand
+    jmp       multiply_loop
+    
+multiply_done:
+    ret                                      # Return result in %rax
 
 # Subroutine halve(long dividend)
 # dividend in %rsi
+# return value in %rax
+# clobbers: %rax, %rsi, %rdi, %r8, %r9
 halve:
-    irmovq    $0x2, %r9                  # init single bit mask in at 0b10
-    irmovq    $1, %rcx                   # init cursor in %rcx at 1
+    irmovq    $0x2, %r8                  # init single bit mask in at 0b10
+    irmovq    $1, %r9                    # init cursor in %rcx at 1
     xorq      %rax, %rax                 # init accumulator = 0
     
 halve_loop:
-    rrmovq    %rsi, %rdx                  # tmp of the dividend
-    subq      %r9, %rdx                  # check if any bits remain for processing
+    rrmovq    %rsi, %rdx                 # tmp of the dividend
+    subq      %r8, %rdx                  # check if any bits remain for processing
     jl        halve_done                 # no more bits to process
-    rrmovq    %rsi, %rdx                  # tmp of the dividend
-    andq      %r9, %rdx                  # check current bit
+    rrmovq    %rsi, %rdx                 # tmp of the dividend
+    andq      %r8, %rdx                  # check current bit
     je        update_halve_parameters    # current term = 0 -> iterate
-    addq      %rcx, %rax                 # add cursor to accumulator
+    addq      %r9, %rax                  # add cursor to accumulator
     
 update_halve_parameters:
-   rrmovq     %r9, %rcx                  # make old mask the new cursor
-   addq       %r9, %r9                   # shift the mask
+   rrmovq     %r8, %r9                   # make old mask the new cursor
+   addq       %r8, %r8                   # shift the mask
    jmp        halve_loop                 # loopidy loop
     
 halve_done:
-    halt
+    ret
 
 .pos 0x400
 stack:
